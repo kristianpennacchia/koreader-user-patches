@@ -64,7 +64,7 @@ function ReaderHighlight:init()
 				icon = _("button.wordreference"),
 				callback = function()
 					UIManager:scheduleIn(0.1, function()
-						WordReference:lookup_and_show(this.selected_text.text)
+						WordReference:showDefinition(this.selected_text.text)
 						-- We don't call this:onClose(), we need the highlight
 						-- to still be there, as we may Highlight it from the
 						-- dict lookup widget.
