@@ -1,14 +1,9 @@
 local ReaderHighlight = require("apps/reader/modules/readerhighlight")
 local _ = require("gettext")
-local C_ = _.pgettext
 local UIManager = require("ui/uimanager")
-local util = require("util")
-local Event = require("ui/event")
-local Notification = require("ui/widget/notification")
-local logger = require("logger")
 local Device = require("device")
-
-local WidgetContainer = require("ui/widget/container/widgetcontainer")
+local NetworkMgr = require("ui/network/manager")
+local Trapper = require("ui/trapper")
 
 -- Store the original function to call it later if needed
 local orig_init = ReaderHighlight.init
@@ -63,11 +58,10 @@ function ReaderHighlight:init()
 			return {
 				icon = _("button.wordreference"),
 				callback = function()
-					UIManager:scheduleIn(0.1, function()
-						WordReference:showDefinition(this.selected_text.text)
-						-- We don't call this:onClose(), we need the highlight
-						-- to still be there, as we may Highlight it from the
-						-- dict lookup widget.
+					NetworkMgr:runWhenOnline(function()
+						Trapper:wrap(function()
+							WordReference:showDefinition(this.selected_text.text)
+						end)
 					end)
 				end,
 			}
