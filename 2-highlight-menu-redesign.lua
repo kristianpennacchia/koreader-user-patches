@@ -60,7 +60,7 @@ function ReaderHighlight:init()
 				callback = function()
 					NetworkMgr:runWhenOnline(function()
 						Trapper:wrap(function()
-							WordReference:showDefinition(this.selected_text.text)
+							WordReference:showDefinition(self.ui, this.selected_text.text)
 						end)
 					end)
 				end,
