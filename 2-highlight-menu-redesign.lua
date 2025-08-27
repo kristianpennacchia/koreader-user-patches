@@ -1,103 +1,101 @@
 local ReaderHighlight = require("apps/reader/modules/readerhighlight")
-local _ = require("gettext")
+local ButtonDialog = require("ui/widget/buttondialog")
 local UIManager = require("ui/uimanager")
-local Device = require("device")
-local NetworkMgr = require("ui/network/manager")
-local Trapper = require("ui/trapper")
+local ffiUtil = require("ffi/util")
+local _ = require("gettext")
 
--- Store the original function to call it later if needed
-local orig_init = ReaderHighlight.init
+function ReaderHighlight:onShowHighlightMenu(index)
+	local selectButton = nil
+	local highlightButton = nil
+	local searchButton = nil
+	local wikipediaButton = nil
+	local wordReferenceButton = nil
+	local dictionaryButton = nil
+	local translateButton = nil
+	local unknownButtons = {}
 
-function ReaderHighlight:init()
-	orig_init(self)
+	for key, fn_button in ffiUtil.orderedPairs(self._highlight_buttons) do
+		local button = fn_button(self, index)
+		if not button.show_in_highlight_dialog_func or button.show_in_highlight_dialog_func() then
+			if key:find("_select") then
+				button.text = nil
+				button.text_func = nil
+				button.icon = index and "button.select-extend" or "button.select"
+				selectButton = button
+			elseif key:find("_highlight") then
+				button.text = nil
+				button.text_func = nil
+				button.icon = "button.highlight"
+				highlightButton = button
+			elseif key:find("_wikipedia") then
+				button.text = nil
+				button.text_func = nil
+				button.icon = "button.wikipedia"
+				wikipediaButton = button
+			elseif key:find("_dictionary") then
+				button.text = nil
+				button.text_func = nil
+				button.icon = "button.dictionary"
+				dictionaryButton = button
+			elseif key:find("_translate") then
+				button.text = nil
+				button.text_func = nil
+				button.icon = "button.translate"
+				translateButton = button
+			elseif key:find("_wordreference") then
+				button.text = nil
+				button.text_func = nil
+				button.icon = "button.wordreference"
+				wordReferenceButton = button
+			elseif key:find("_search") then
+				button.text = nil
+				button.text_func = nil
+				button.icon = "button.search"
+				searchButton = button
+			else
+				table.insert(unknownButtons, button)
+			end
+		end
+	end
 
-	local WordReference = require("wordreference")
-	WordReference.show_highlight_dialog_button = false
+	local highlight_buttons = {{}}
 
-	--- rearrange these as you like
-	-- "item" structure like explained in "01_select"
+	-- Add custom rows.
+	highlight_buttons[1] = {
+		selectButton,
+		highlightButton,
+		wikipediaButton,
+		wordReferenceButton,
+		dictionaryButton,
+		translateButton,
+		searchButton,
+	}
 
-	self._highlight_buttons = {
-		["01_select"] = function(this, index)
-			return {
-				icon = index and _("button.select-extend") or _("button.select"),
-				enabled = not (index and this.ui.annotation.annotations[index].text_edited),
-				callback = function()
-					this:startSelection(index)
-					this:onClose()
-					if not Device:isTouchDevice() then
-						self:onStartHighlightIndicator()
-					end
-				end,
-			}
+	-- Split unknownButtons into smaller rows.
+	local maxRowLength = 2
+	if #unknownButtons > 0 then
+		for i = 1, #unknownButtons, maxRowLength do
+			local row = {}
+			for j = i, math.min(i + maxRowLength - 1, #unknownButtons) do
+				row[#row + 1] = unknownButtons[j]
+			end
+			highlight_buttons[#highlight_buttons + 1] = row
+		end
+	end
+
+	self.highlight_dialog = ButtonDialog:new{
+		buttons = highlight_buttons,
+		anchor = function()
+			return self:_getDialogAnchor(self.highlight_dialog, index)
 		end,
-		["02_highlight"] = function(this)
-			return {
-				icon = _("button.highlight"),
-				enabled = this.hold_pos ~= nil,
-				callback = function()
-					this:saveHighlight(true)
-					this:onClose()
-				end,
-			}
-		end,
-		["03_wikipedia"] = function(this)
-			return {
-				icon = _("button.wikipedia"),
-				callback = function()
-					UIManager:scheduleIn(0.1, function()
-						this:lookupWikipedia()
-						-- We don't call this:onClose(), we need the highlight
-						-- to still be there, as we may Highlight it from the
-						-- dict lookup widget.
-					end)
-				end,
-			}
-		end,
-		["04_wordreference"] = function(this)
-			return {
-				icon = _("button.wordreference"),
-				callback = function()
-					NetworkMgr:runWhenOnline(function()
-						Trapper:wrap(function()
-							WordReference:showDefinition(self.ui, this.selected_text.text)
-						end)
-					end)
-				end,
-			}
-		end,
-		["05_dictionary"] = function(this, index)
-			return {
-				icon = _("button.dictionary"),
-				callback = function()
-					this:lookupDict(index)
-					-- We don't call this:onClose(), same reason as above
-				end,
-			}
-		end,
-		["06_translate"] = function(this, index)
-			return {
-				icon = _("button.translate"),
-				callback = function()
-					this:translate(index)
-					-- We don't call this:onClose(), so one can still see
-					-- the highlighted text when moving the translated
-					-- text window, and also if NetworkMgr:promptWifiOn()
-					-- is needed, so the user can just tap again on this
-					-- button and does not need to select the text again.
-				end,
-			}
-		end,
-		["07_search"] = function(this)
-			return {
-				icon = _("button.search"),
-				callback = function()
-					this:onHighlightSearch()
-					-- We don't call this:onClose(), crengine will highlight
-					-- search matches on the current page, and self:clear()
-					-- would redraw and remove crengine native highlights
-				end,
-			}
+		tap_close_callback = function()
+			if self.hold_pos then
+				self:clear()
+			end
 		end,
 	}
+
+	-- NOTE: Disable merging for this update,
+	--       or the buggy Sage kernel may alpha-blend it into the page (with a bogus alpha value, to boot)...
+	UIManager:show(self.highlight_dialog, "[ui]")
 end
